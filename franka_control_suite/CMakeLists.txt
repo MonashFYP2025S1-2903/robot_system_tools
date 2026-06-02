@@ -53,3 +53,8 @@ endforeach() ]]
 
 
 
+
+# build gravity_comp_zmq
+file(GLOB_RECURSE GRAVITY_COMP_SRC ${CMAKE_CURRENT_LIST_DIR}/src/runners/gravity_comp_zmq.cpp)
+add_executable(gravity_comp_zmq ${GRAVITY_COMP_SRC})
+target_link_libraries(gravity_comp_zmq PUBLIC Franka::Franka libzmq ${Franka} ${cppzmq} Eigen3::Eigen)
