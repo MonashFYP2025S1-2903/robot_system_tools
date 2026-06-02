@@ -7,8 +7,8 @@ SHELL ["/bin/bash", "-c"]
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-ARG workstation_ip=192.168.0.1
-ARG realtime_computer_ip=192.168.0.3
+ARG workstation_ip=138.194.50.71
+ARG realtime_computer_ip=138.194.50.71
 ARG robot_server_version=5
 
 # Dependencies for latency plot
@@ -45,18 +45,6 @@ RUN apt-get update && apt-get install -y \
     g++ \
     unzip \
     python3-catkin-tools
-# Build and install Protobuf 
-RUN cd \
-    # && mkdir git \
-    && cd git \ 
-    && wget https://github.com/protocolbuffers/protobuf/releases/download/v3.11.4/protobuf-all-3.11.4.zip \ 
-    && unzip protobuf-all-3.11.4.zip \ 
-    && cd protobuf-3.11.4 \ 
-    && ./configure \
-    && make -j$(nproc) \
-    && make check -j$(nproc) \ 
-    && sudo make install \ 
-    && sudo ldconfig 
 
 # Dependencies for franka-interface and protobuf
 RUN apt-get install -y  ros-noetic-realsense2-camera ros-noetic-combined-robot-hw
