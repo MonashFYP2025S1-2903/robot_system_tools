@@ -69,19 +69,62 @@ int main(int argc, char** argv) {
             {{20, 20, 18, 18, 18, 18}},     {{20, 20, 18, 18, 18, 18}},
             {{20, 20, 18, 18, 18, 18}},     {{20, 20, 18, 18, 18, 18}});
 
-        const std::array<double, 7> q0 = robot.readOnce().q;
+        const franka::RobotState s0 = robot.readOnce();
+        const std::array<double, 7> q0 = s0.q;
+        const franka::Model model = robot.loadModel();
 
-        // Generate perturbed configs around the current pose q0
+        // Proactive collision checks via forward kinematics (no planner).
+        const double z_floor    = 0.08;  // min height (m) for EE/wrist/flange above the table (base z=0)
+        const double self_clear = 0.15;  // min distance (m) of EE/flange to shoulder/upper-arm joints
+
+        auto link_xyz = [&](franka::Frame fr, const std::array<double, 7>& q) {
+            const std::array<double, 16> p = model.pose(fr, q, s0.F_T_EE, s0.EE_T_K);
+            return std::array<double, 3>{p[12], p[13], p[14]};  // column-major translation
+        };
+        auto dist = [](const std::array<double, 3>& a, const std::array<double, 3>& b) {
+            return std::sqrt((a[0]-b[0])*(a[0]-b[0]) + (a[1]-b[1])*(a[1]-b[1]) + (a[2]-b[2])*(a[2]-b[2]));
+        };
+        auto pose_safe = [&](const std::array<double, 7>& q) -> bool {
+            // table: key frames must stay above the floor
+            for (franka::Frame fr : {franka::Frame::kEndEffector, franka::Frame::kFlange,
+                                     franka::Frame::kJoint7, franka::Frame::kJoint6, franka::Frame::kJoint5})
+                if (link_xyz(fr, q)[2] < z_floor) return false;
+            // crude self-collision: EE/flange not too close to shoulder/upper-arm joints
+            const auto ee = link_xyz(franka::Frame::kEndEffector, q);
+            const auto fl = link_xyz(franka::Frame::kFlange, q);
+            for (franka::Frame fr : {franka::Frame::kJoint1, franka::Frame::kJoint2, franka::Frame::kJoint3}) {
+                const auto p = link_xyz(fr, q);
+                if (dist(ee, p) < self_clear || dist(fl, p) < self_clear) return false;
+            }
+            return true;
+        };
+
+        if (!pose_safe(q0)) {
+            std::cerr << "ABORT: start pose fails the table/self-collision check. "
+                         "Hand-guide to a safer, higher start pose with clearance.\n";
+            return 2;
+        }
+
+        // Generate ONLY collision-checked perturbed configs around q0
         std::mt19937 rng(seed);
         std::uniform_real_distribution<double> u(-1.0, 1.0);
         std::vector<std::array<double, 7>> poses;
-        for (int i = 0; i < n_poses; ++i) {
+        int attempts = 0;
+        const int max_attempts = n_poses * 60;
+        while (static_cast<int>(poses.size()) < n_poses && attempts < max_attempts) {
+            ++attempts;
             std::array<double, 7> q = q0;
             for (int j = 0; j < 7; ++j) {
                 q[j] = q0[j] + u(rng) * dq[j];
                 q[j] = std::max(q_min[j], std::min(q_max[j], q[j]));
             }
-            poses.push_back(q);
+            if (pose_safe(q)) poses.push_back(q);
+        }
+        std::cout << "Generated " << poses.size() << "/" << n_poses
+                  << " collision-checked poses (" << attempts << " attempts).\n";
+        if (poses.empty()) {
+            std::cerr << "No safe poses found — shrink dq (5th arg <1) or pick a more open start. Aborting.\n";
+            return 2;
         }
 
         zmq::context_t ctx(1);
@@ -96,7 +139,7 @@ int main(int argc, char** argv) {
             sock.recv(&req);
             const std::string cmd(static_cast<char*>(req.data()), req.size());
 
-            if (cmd == "done" || idx >= n_poses) {
+            if (cmd == "done" || idx >= static_cast<int>(poses.size())) {
                 std::cout << "Returning to start pose...\n";
                 try { MotionGenerator home(0.15, q0); robot.control(home); }
                 catch (const franka::Exception& e) { std::cout << "home move: " << e.what() << "\n"; }
@@ -107,18 +150,44 @@ int main(int argc, char** argv) {
                 break;
             }
 
-            std::cout << "Moving to pose " << idx << "/" << n_poses << std::endl;
-            try {
-                MotionGenerator mg(0.15, poses[idx]);
-                robot.control(mg);
-            } catch (const franka::Exception& e) {
-                std::cout << "  move failed: " << e.what() << " — recovering\n";
-                try { robot.automaticErrorRecovery(); } catch (...) {}
+            // Advance to the next pose whose straight joint-space PATH is also collision-checked.
+            std::array<double, 16> ee{};
+            bool moved = false;
+            while (idx < static_cast<int>(poses.size())) {
+                const std::array<double, 7> q_cur = robot.readOnce().q;
+                bool path_ok = true;
+                for (int k = 1; k <= 10 && path_ok; ++k) {
+                    const double a = k / 10.0;
+                    std::array<double, 7> qi;
+                    for (int j = 0; j < 7; ++j) qi[j] = (1.0 - a) * q_cur[j] + a * poses[idx][j];
+                    if (!pose_safe(qi)) path_ok = false;
+                }
+                if (!path_ok) {
+                    std::cout << "  pose " << idx << " path unsafe (table/self) — skipping\n";
+                    ++idx;
+                    continue;
+                }
+                std::cout << "Moving to pose " << idx << "/" << poses.size() << std::endl;
+                try {
+                    MotionGenerator mg(0.15, poses[idx]);
+                    robot.control(mg);
+                } catch (const franka::Exception& e) {
+                    std::cout << "  move failed: " << e.what() << " — recovering\n";
+                    try { robot.automaticErrorRecovery(); } catch (...) {}
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(800));  // settle
+                ee = robot.readOnce().O_T_EE;
+                ++idx;
+                moved = true;
+                break;
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(800));  // settle
-
-            const std::array<double, 16> ee = robot.readOnce().O_T_EE;
-            ++idx;
+            if (!moved) {  // all remaining poses skipped — send zero sentinel; client stops
+                std::array<double, 16> zero{};
+                zmq::message_t rep(zero.size() * sizeof(double));
+                std::memcpy(rep.data(), zero.data(), zero.size() * sizeof(double));
+                sock.send(rep);
+                continue;
+            }
             zmq::message_t rep(ee.size() * sizeof(double));
             std::memcpy(rep.data(), ee.data(), ee.size() * sizeof(double));
             sock.send(rep);
