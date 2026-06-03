@@ -32,6 +32,12 @@ file( GLOB_RECURSE FRANKA_READ_STATES ${CMAKE_CURRENT_LIST_DIR}/src/runners/read
 add_executable(read_states ${FRANKA_READ_STATES})
 target_link_libraries(read_states PUBLIC Franka::Franka libzmq ${Franka} ${cppzmq} Eigen3::Eigen )
 
+# build auto_handeye_mover (needs common.cpp for MotionGenerator)
+add_executable(auto_handeye_mover
+    ${CMAKE_CURRENT_LIST_DIR}/src/runners/auto_handeye_mover.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/common.cpp )
+target_link_libraries(auto_handeye_mover PUBLIC Franka::Franka libzmq ${Franka} ${cppzmq} Eigen3::Eigen )
+
 
 #[[build tests
 
