@@ -51,9 +51,10 @@ int main(int argc, char** argv) {
     const unsigned seed = (argc > 4) ? std::stoul(argv[4]) : 42u;
     const double scale  = (argc > 5) ? std::stod(argv[5]) : 1.0;  // shrink/grow perturbations
 
-    // Per-joint perturbation half-ranges (rad): wrist (5,6,7) largest for rotation variation;
-    // base/arm small for position diversity; q2,q3 tight for safety/visibility.
-    std::array<double, 7> dq = {0.20, 0.10, 0.10, 0.15, 0.40, 0.40, 0.50};
+    // Per-joint perturbation half-ranges (rad). Larger ARM ranges (1,2,4) give the EE the
+    // TRANSLATION spread hand-eye needs; wrist (5,6,7) gives rotation spread. The FK collision
+    // checks + marker-visibility filter reject unsafe/out-of-view poses, so we can be generous.
+    std::array<double, 7> dq = {0.50, 0.35, 0.25, 0.35, 0.60, 0.60, 0.70};
     for (auto& d : dq) d *= scale;
 
     // Franka Panda joint limits (rad) with a small margin
