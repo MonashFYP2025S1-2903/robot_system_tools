@@ -70,7 +70,38 @@ int main(int argc, char** argv) {
             {{20, 20, 18, 18, 18, 18}},     {{20, 20, 18, 18, 18, 18}},
             {{20, 20, 18, 18, 18, 18}},     {{20, 20, 18, 18, 18, 18}});
 
-        const franka::RobotState s0 = robot.readOnce();
+        // --- Verify the robot is FCI-controllable (not hand-guiding / reflex / user-stopped) ---
+        auto mode_name = [](franka::RobotMode m) -> std::string {
+            switch (m) {
+                case franka::RobotMode::kOther: return "Other";
+                case franka::RobotMode::kIdle: return "Idle (FCI-ready)";
+                case franka::RobotMode::kMove: return "Move";
+                case franka::RobotMode::kGuiding: return "Guiding (hand-guiding)";
+                case franka::RobotMode::kReflex: return "Reflex (safety stop)";
+                case franka::RobotMode::kUserStopped: return "UserStopped";
+                case franka::RobotMode::kAutomaticErrorRecovery: return "AutomaticErrorRecovery";
+                default: return "Unknown";
+            }
+        };
+        franka::RobotState s0 = robot.readOnce();
+        int waited = 0;
+        while (s0.robot_mode != franka::RobotMode::kIdle) {
+            if (s0.robot_mode == franka::RobotMode::kReflex ||
+                s0.robot_mode == franka::RobotMode::kUserStopped) {
+                std::cerr << "Robot is " << mode_name(s0.robot_mode)
+                          << " — recover in Franka Desk (dismiss errors / unlock joints), then re-run.\n";
+                return 2;
+            }
+            if (s0.robot_mode == franka::RobotMode::kGuiding)
+                std::cout << "Robot in HAND-GUIDING mode — release the enabling/guiding button to continue...\n";
+            else
+                std::cout << "Waiting for FCI-ready (kIdle); current mode: " << mode_name(s0.robot_mode) << std::endl;
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            if (++waited > 60) { std::cerr << "Timed out waiting for kIdle (60 s). Aborting.\n"; return 2; }
+            s0 = robot.readOnce();
+        }
+        std::cout << "Robot is FCI-ready (kIdle). Proceeding.\n";
+
         const std::array<double, 7> q0 = s0.q;
         const franka::Model model = robot.loadModel();
 
