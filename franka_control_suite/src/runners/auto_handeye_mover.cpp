@@ -42,7 +42,7 @@
 int main(int argc, char** argv) {
     if (argc < 4) {
         std::cerr << "Usage: " << argv[0]
-                  << " <robot_ip> <zmq_port> <n_poses> [seed] [max_dq_scale]\n";
+                  << " <robot_ip> <zmq_port> <n_poses> [seed] [max_dq_scale] [z_floor_m]\n";
         return 1;
     }
     const std::string robot_ip = argv[1];
@@ -50,6 +50,9 @@ int main(int argc, char** argv) {
     const int   n_poses = std::stoi(argv[3]);
     const unsigned seed = (argc > 4) ? std::stoul(argv[4]) : 42u;
     const double scale  = (argc > 5) ? std::stod(argv[5]) : 1.0;  // shrink/grow perturbations
+    // Min height (m) the EE/wrist must stay above the table (base z=0). Raise it (e.g. 0.15-0.20)
+    // to keep a gripper-held cube well ABOVE the table so it can't be pushed down / dislodged.
+    const double z_floor = (argc > 6) ? std::stod(argv[6]) : 0.08;
 
     // Per-joint perturbation half-ranges (rad). Larger ARM ranges (1,2,4) give the EE the
     // TRANSLATION spread hand-eye needs; wrist (5,6,7) gives rotation spread. The FK collision
@@ -105,8 +108,7 @@ int main(int argc, char** argv) {
         const std::array<double, 7> q0 = s0.q;
         const franka::Model model = robot.loadModel();
 
-        // Proactive collision checks via forward kinematics (no planner).
-        const double z_floor    = 0.08;  // min height (m) for EE/wrist/flange above the table (base z=0)
+        // Proactive collision checks via forward kinematics (no planner). z_floor is a CLI arg above.
         const double self_clear = 0.15;  // min distance (m) of EE/flange to shoulder/upper-arm joints
 
         auto link_xyz = [&](franka::Frame fr, const std::array<double, 7>& q) {
@@ -163,7 +165,8 @@ int main(int argc, char** argv) {
         zmq::socket_t  sock(ctx, ZMQ_REP);
         sock.bind("tcp://*:" + zmq_port);
         std::cout << "auto_handeye_mover ready on port " << zmq_port << " — " << n_poses
-                  << " poses around current q0 (dq scale " << scale << "). Waiting for 'next'.\n";
+                  << " poses around current q0 (dq scale " << scale << ", z_floor " << z_floor
+                  << " m). Waiting for 'next'.\n";
 
         int idx = 0;
         while (true) {
