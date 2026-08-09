@@ -64,3 +64,15 @@ endforeach() ]]
 file(GLOB_RECURSE GRAVITY_COMP_SRC ${CMAKE_CURRENT_LIST_DIR}/src/runners/gravity_comp_zmq.cpp)
 add_executable(gravity_comp_zmq ${GRAVITY_COMP_SRC})
 target_link_libraries(gravity_comp_zmq PUBLIC Franka::Franka libzmq ${Franka} ${cppzmq} Eigen3::Eigen)
+
+# build joint_pos_runner (deployment joint-position impedance runner)
+add_executable(joint_pos_runner
+    ${CMAKE_CURRENT_LIST_DIR}/src/runners/joint_pos_runner.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/controllers/joint_pos.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/common.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/communication/action_subscriber.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/communication/state_publisher.cpp)
+target_link_libraries(joint_pos_runner PUBLIC Franka::Franka libzmq ${Franka} ${cppzmq} Eigen3::Eigen)
+
+add_executable(touch_probe ${CMAKE_CURRENT_LIST_DIR}/src/runners/touch_probe.cpp)
+target_link_libraries(touch_probe PUBLIC Franka::Franka libzmq ${Franka} ${cppzmq} Eigen3::Eigen)
