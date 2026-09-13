@@ -16,6 +16,11 @@ Run on the Franka workstation (same box/ROS network as `franka-interface`), e.g.
     conda activate <frankapy env>
     python xbox_teleop.py
 
+Related Obsidian vault note: Work_CSIRO/P_2026-08-28_TactileGap_PreferenceLearning/2026-09-11_OMX_Teleop_Franka_CPS_Code.md
+(same trajectory-collection goal as the CPS OMX-leader / SpaceMouse paths documented there; this
+script is the CPS-independent alternative, §12 "Gamepad EE control" in that note names the CPS
+repo's own joystick_teleop.py — this reimplements the same idea without touching the CPS repo).
+
 NOT YET TESTED ON HARDWARE. Two things to verify before trusting it on the real robot:
   1. Whether this FrankaPy version's `goto_pose_delta` streams smoothly when called back-to-back
      with short `duration`, or resets velocity to zero each call (a bit jerky either way — this
