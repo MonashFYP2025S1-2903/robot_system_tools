@@ -55,8 +55,8 @@ from scipy.spatial.transform import Rotation as R
 HZ = 30.0                       # matches the architecture's "~30 Hz policy/command" rate
 DT = 1.0 / HZ
 DEADZONE = 0.12
-MAX_LIN_VEL = 0.25               # m/s at full stick deflection
-MAX_ROT_VEL = 0.4                # rad/s at full stick/trigger deflection
+DEFAULT_MAX_LIN_VEL = 0.25      # m/s at full stick deflection -- override with --max-lin-vel
+DEFAULT_MAX_ROT_VEL = 0.4       # rad/s at full stick/trigger deflection -- override with --max-rot-vel
 CMD_PORT = 2069
 STATE_PORT = 2096
 
@@ -80,7 +80,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1", help="host running franka_control_suite's ZMQ sockets")
     ap.add_argument("--print-raw", action="store_true", help="print raw axis/button values, no ZMQ connection")
+    ap.add_argument("--max-lin-vel", type=float, default=DEFAULT_MAX_LIN_VEL, help="m/s at full stick deflection")
+    ap.add_argument("--max-rot-vel", type=float, default=DEFAULT_MAX_ROT_VEL, help="rad/s at full stick/trigger deflection")
     args = ap.parse_args()
+    max_lin_vel = args.max_lin_vel
+    max_rot_vel = args.max_rot_vel
 
     pygame.init()
     pygame.joystick.init()
@@ -110,7 +114,7 @@ def main():
     print(f"Connecting to franka_control_suite on {args.host} (cmd :{CMD_PORT}, state :{STATE_PORT})...")
     xyz, quat = recv_ee_pose(state_sub)
     print(f"Initial EE pose: xyz={np.round(xyz, 3)} quat_xyzw={np.round(quat, 3)}")
-    print("Starting teleop loop — Ctrl+C to stop.")
+    print(f"Starting teleop loop (max_lin_vel={max_lin_vel} m/s, max_rot_vel={max_rot_vel} rad/s) — Ctrl+C to stop.")
 
     try:
         while True:
@@ -149,10 +153,10 @@ def main():
                 pass  # no fresher state this tick — keep integrating from our own last target
 
             # --- integrate this tick's delta on top of current state ---
-            lin_delta = np.array([lx, ly, ry]) * MAX_LIN_VEL * DT
-            roll = (rb - lb) * MAX_ROT_VEL * DT
-            pitch = (rt - lt) * MAX_ROT_VEL * DT
-            yaw = rx * MAX_ROT_VEL * DT
+            lin_delta = np.array([lx, ly, ry]) * max_lin_vel * DT
+            roll = (rb - lb) * max_rot_vel * DT
+            pitch = (rt - lt) * max_rot_vel * DT
+            yaw = rx * max_rot_vel * DT
 
             xyz = xyz + lin_delta
             if abs(roll) + abs(pitch) + abs(yaw) > 1e-9:
