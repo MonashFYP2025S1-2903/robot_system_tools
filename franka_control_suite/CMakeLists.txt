@@ -23,7 +23,18 @@ link_directories(${Franka_INCLUDE_DIRS})
 #build franka_control
 # define source files 
 file(GLOB_RECURSE FRANKA_CONTROL_SRC ${CMAKE_CURRENT_LIST_DIR}/src/*.cpp )
-list(REMOVE_ITEM FRANKA_CONTROL_SRC ${CMAKE_CURRENT_LIST_DIR}/src/runners/read_states.cpp )
+# Exclude the other runners' own main()-containing source files -- each is built as its own
+# separate executable below. Leaving them in this glob causes "multiple definition of main"
+# link errors on a from-scratch build (found 2026-09-14 building under a fresh account;
+# apparently franka_control had never been built via a clean `make all` on this codebase
+# before -- only individual targets like joint_pos_runner had been built directly).
+list(REMOVE_ITEM FRANKA_CONTROL_SRC
+    ${CMAKE_CURRENT_LIST_DIR}/src/runners/read_states.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/runners/gravity_comp_zmq.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/runners/joint_pos_runner.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/runners/touch_probe.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/runners/auto_handeye_mover.cpp
+)
 add_executable(franka_control ${FRANKA_CONTROL_SRC})
 target_link_libraries(franka_control  PUBLIC Franka::Franka libzmq ${Franka} ${cppzmq} Eigen3::Eigen )
 
