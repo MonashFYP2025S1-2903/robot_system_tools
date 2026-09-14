@@ -5,6 +5,7 @@
 #include <franka/exception.h>
 #include "common.h"
 #include <thread>
+#include <chrono>
 
 namespace robotContext {
     franka::Robot *robot;
@@ -31,7 +32,7 @@ int main(int argc, char* argv[]) {
         workstation_ip = argv[3];
     }
     try {
-        ActionSubscriber as_(CommsDataType::POSE, std::string("tcp://") + realtime_pc_ip + std::string(":2069"));
+        ActionSubscriber as_(CommsDataType::POSE_QUAT_GRIPPER, std::string("tcp://") + realtime_pc_ip + std::string(":2069"));
         StatePublisher sp_(std::string("tcp://") + workstation_ip + std::string(":2096"));
         Comms::actionSubscriber = &as_; 
         Comms::statePublisher = &sp_; 
@@ -64,19 +65,45 @@ int main(int argc, char* argv[]) {
         initial_quat.normalize();
         Comms::actionSubscriber->values = {
             initial_transform.translation().x(), initial_transform.translation().y(), initial_transform.translation().z(),
-            initial_quat.x(), initial_quat.y(), initial_quat.z(), initial_quat.w()
+            initial_quat.x(), initial_quat.y(), initial_quat.z(), initial_quat.w(),
+            1.0  // gripper: non-negative = open (see readGripperCommand's convention) -- safe default
         };
 
         InverseKinematics IK_(1, IKType::M_P_PSEUDO_INVERSE);
+
+        // Both background threads are detached and self-catching: destroying a still-joinable
+        // std::thread, or letting an exception escape a thread's top-level function, both call
+        // std::terminate() directly -- this is exactly what caused the "terminate called without
+        // an active exception" crash found 2026-09-14 (an exception during live teleop operation
+        // escaped past the catch(franka::Exception&) below and unwound through this thread while
+        // it was still joinable). Pattern matches joint_pos_runner.cpp's already-proven threads.
         std::thread subscribeThread([]() {
-            while(true) {
-                Comms::actionSubscriber->readMessage();
-            }
-        });        
+            try { while(true) { Comms::actionSubscriber->readMessage(); } }
+            catch (...) {}
+        });
+        subscribeThread.detach();
+
+        // Gripper thread -- same ZMQ channel as the arm (CommsDataType::POSE_QUAT_GRIPPER's
+        // trailing scalar), same libfranka call pattern as the proven joint_pos_runner.cpp.
+        // grasp() is force-limited (20N) and stops on contact, not a blind position close.
+        std::thread gripThread([&gripper_]() {
+            double max_w = gripper_.readOnce().max_width;
+            bool closed = false;  // primed buffer above defaults to "open" (1.0)
+            try {
+                while (true) {
+                    double g = Comms::actionSubscriber->readGripperCommand();
+                    if (g < 0.0 && !closed)      { gripper_.grasp(0.0, 0.1, 20.0, 0.05, 0.05); closed = true; }
+                    else if (g >= 0.0 && closed) { gripper_.move(max_w, 0.1);                   closed = false; }
+                    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+                }
+            } catch (...) {}
+        });
+        gripThread.detach();
+
         while(true) {
             robotContext::robot->control(IK_);
         }
-    
+
     } catch (const franka::Exception& e) {
         std::cout << e.what() << std::endl;
         return -1;

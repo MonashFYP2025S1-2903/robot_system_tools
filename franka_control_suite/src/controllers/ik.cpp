@@ -54,17 +54,20 @@ franka::JointVelocities InverseKinematics::operator() (const franka::RobotState&
     ee_ori_now_quat.normalize();
     Eigen::Quaterniond  target_ee_ori_quat;
     //Eigen::AngleAxisd ee_orientation_axis_now(ee_orientation_quat_now);
+    // NOTE: ee_goal_pose may carry a trailing gripper scalar (CommsDataType::POSE_QUAT_GRIPPER,
+    // 8 values total) on top of the original 7-value pose -- always slice the quaternion as
+    // .segment(3, 4) (indices 3..6), never .tail(4), which would instead grab indices 4..7 and
+    // silently pull in the gripper value as if it were part of the orientation.
     if (ControllersBase::control_mode_ == ControlMode::DELTA){
-        target_ee_translation = ee_translation_now + Eigen::Vector3d(ee_goal_pose.head(3)); 
-        //Eigen::Vector4d ee_ori_goal_vec = ee_goal_pose.tail(4);
-        Eigen::Quaterniond ee_ori_goal_vec(Eigen::Vector4d(ee_goal_pose.tail(4)));
+        target_ee_translation = ee_translation_now + Eigen::Vector3d(ee_goal_pose.head(3));
+        Eigen::Quaterniond ee_ori_goal_vec(Eigen::Vector4d(ee_goal_pose.segment(3, 4)));
         ee_ori_goal_vec.normalize();
-        target_ee_ori_quat = utils::quat_multiplication(ee_ori_goal_vec, 
+        target_ee_ori_quat = utils::quat_multiplication(ee_ori_goal_vec,
                                                         ee_ori_now_quat);
     }
     else{
         target_ee_translation = Eigen::Vector3d(ee_goal_pose.head(3));
-        Eigen::Vector4d ee_ori_goal_vec = ee_goal_pose.tail(4);
+        Eigen::Vector4d ee_ori_goal_vec = ee_goal_pose.segment(3, 4);
         target_ee_ori_quat = Eigen::Quaterniond(ee_ori_goal_vec);
         target_ee_ori_quat.normalize();
     }

@@ -16,7 +16,8 @@ enum class CommsDataType {
     JOINT_ANGLES_GRIPPER,
     JOINT_ANGLES_VEL_GRIPPER,
     DELTA_POSE_GRIPPER,
-    POSE_GRIPPER
+    POSE_GRIPPER,
+    POSE_QUAT_GRIPPER
 };
 
 inline std::map<CommsDataType, int> typeLengths = {
@@ -29,6 +30,11 @@ inline std::map<CommsDataType, int> typeLengths = {
     {CommsDataType::JOINT_ANGLES_VEL_GRIPPER, 7 + 7 + 2},
     {CommsDataType::DELTA_POSE_GRIPPER, 6 + 2},
     {CommsDataType::POSE_GRIPPER, 6 + 2},
+    // xyz(3) + quaternion(4) + gripper(1) -- single scalar gripper action, matching IsaacLab's
+    // mdp.BinaryJointPositionActionCfg (one action term, not two independent finger joints) and
+    // its sign convention (negative = close, e.g. camera_wrist_demo.py's GRIPPER_CLOSE_ACTION =
+    // -1.0). NOT the same layout as POSE_GRIPPER (6+2, no quaternion) despite the same total length.
+    {CommsDataType::POSE_QUAT_GRIPPER, 7 + 1},
 };
 
 class ActionSubscriber {
@@ -43,6 +49,7 @@ public:
     void readMessage();
     void readValues(std::vector<double>& output);
     double readGripperCommands();
+    double readGripperCommand();
     void setDataType(CommsDataType dataType);
 
     std::vector<double> values;

@@ -1,20 +1,25 @@
 """
-Xbox controller -> Franka EE-delta teleop, via franka_control_suite's ZMQ Cartesian-impedance
-interface (NOT FrankaPy — see the vault note below for why that path is explicitly avoided here).
+Xbox controller -> Franka EE-delta teleop, via franka_control_suite's ZMQ interface
+(NOT FrankaPy — see the vault note below for why that path is explicitly avoided here).
 
-Protocol -- confirmed 2026-09-14 by reading the actual runner (src/runners/runner.cpp, the
-`franka_control` executable), not just the example_python_scripts/example_CartesianMotionControl.py
-reference script (whose float32 state dtype turned out to be wrong for this runner -- see below):
-    Command: ZMQ PUB  tcp://127.0.0.1:2069 -> 7x float64 [x,y,z,qx,qy,qz,qw], an ABSOLUTE target
-             pose. The C++ side runs InverseKinematics(M_P_PSEUDO_INVERSE) -- genuine differential
-             IK (Jacobian pseudo-inverse -> joint *velocity*), NOT Cartesian impedance control.
-             A CartesianImpedance controller class exists in the source tree but no executable is
-             wired to it (checked CMakeLists.txt add_executable list). Continuously publishing an
-             updated absolute target *is* the streaming teleop interface either way.
+Protocol -- confirmed by reading the actual runner (src/runners/runner.cpp, the `franka_control`
+executable), not just the example_python_scripts/example_CartesianMotionControl.py reference
+script (whose float32 state dtype turned out to be wrong for this runner):
+    Command: ZMQ PUB  tcp://127.0.0.1:2069 -> 8x float64 [x,y,z,qx,qy,qz,qw,gripper], an ABSOLUTE
+             target pose plus a single gripper scalar (CommsDataType::POSE_QUAT_GRIPPER). The C++
+             side runs InverseKinematics(M_P_PSEUDO_INVERSE) for the arm -- genuine differential IK
+             (Jacobian pseudo-inverse -> joint *velocity*), NOT Cartesian impedance control (a
+             CartesianImpedance controller class exists in the source tree but no executable is
+             wired to it). The gripper scalar follows IsaacLab's mdp.BinaryJointPositionActionCfg
+             sign convention (negative = close, non-negative = open -- see camera_wrist_demo.py's
+             GRIPPER_CLOSE_ACTION = -1.0 in men119-isaaclabextensioncsirohri), read on the C++ side
+             by a dedicated thread calling franka::Gripper::grasp()/move() directly -- same pattern
+             as the already-proven joint_pos_runner.cpp used for the real cube-lift policy
+             deployment (force-limited grasp at 20N, stops on contact, not a blind position close).
+             Continuously publishing an updated absolute target *is* the streaming teleop interface.
     State:   ZMQ SUB  tcp://127.0.0.1:2096, CONFLATE=True -> 16x float64 (NOT float32 -- confirmed
-             against StatePublisher::writeMessage's std::vector<double> -- a float32 read gets
-             "cannot reshape array of size 32 into shape (4,4)", found on the first real test run),
-             the current EE pose as a column-major 4x4 homogeneous transform.
+             against StatePublisher::writeMessage's std::vector<double>), the current EE pose as a
+             column-major 4x4 homogeneous transform.
 
 Only requires zmq + numpy + scipy + pygame -- no frankapy, no autolab_core, no ROS `tf`.
 
@@ -29,19 +34,17 @@ Related Obsidian vault note:
 
 Run ON THE SAME MACHINE as the running franka_control_suite controller process (ZMQ PUB/SUB bind
 to 127.0.0.1 by default -- localhost only, unless that machine and this script's --host differ
-and the C++ side is rebuilt to bind 0.0.0.0). Which physical machine that is (the Franka
-workstation itself, or a separate dedicated realtime PC) is NOT YET CONFIRMED -- check before
-running. Start the controller first (see franka_control_suite/README.md for the runner command),
-*then* this script.
+and the C++ side is rebuilt to bind 0.0.0.0) -- confirmed to be the Franka workstation itself.
+Start the controller first (see franka_control_suite/README.md for the runner command), *then*
+this script.
 
-Hardware-tested 2026-09-14 (men119 account): franka_control's cold-start crash (unsafe all-zero
-ActionSubscriber default under ControlMode::ABSOLUTE -- see the vault note) and its move-to-rest
-speed (0.5 -> 0.1) are both fixed as of commit 3cafad1. This script's own state-read dtype bug
-(float32 -> float64, above) was caught on the first live connection attempt, not yet re-tested
-after the fix. Also note: this protocol has no gripper channel in the reviewed files (7-float
-pose only) -- gripper control (if needed) is a separate, not-yet-identified path (likely
-libfranka's gripper API directly, or a separate ZMQ topic not seen in the files checked so far).
-A/B buttons are wired to print a TODO instead of silently doing nothing.
+Hardware-tested end-to-end on the Franka workstation (men119 account): cold-start crash, move
+speed, state dtype, right-stick/trigger axis mapping, and realtime-scheduling permission (needs
+`sudo setcap cap_sys_nice+ep` on the built `franka_control` binary -- re-run after every rebuild,
+including after adding the gripper channel) were all found and fixed via live testing. A/B now
+send the gripper scalar instead of printing a TODO; the runner-side grasp/release logic itself is
+carried over from joint_pos_runner.cpp's proven pattern but the *combination* with this IK runner
+is new -- treat the first gripper-enabled test as exactly that, not a confirmed-safe rerun.
 """
 import argparse
 import time
@@ -93,7 +96,7 @@ def main():
     print(f"  deadzone    = {DEADZONE}")
     print(f"  rate        = {HZ} Hz")
     print(f"  host        = {args.host} (cmd :{CMD_PORT}, state :{STATE_PORT})")
-    print("  Override speed with --max-lin-vel / --max-rot-vel. Gripper (A/B) not wired yet.")
+    print("  Override speed with --max-lin-vel / --max-rot-vel. Gripper: A=close, B=open.")
     print("=" * 60)
 
     pygame.init()
@@ -126,6 +129,8 @@ def main():
     print(f"Initial EE pose: xyz={np.round(xyz, 3)} quat_xyzw={np.round(quat, 3)}")
     print("Starting teleop loop — Ctrl+C to stop.")
 
+    gripper_cmd = 1.0  # open -- matches runner.cpp's primed default; A=close, B=open
+
     try:
         while True:
             t0 = time.time()
@@ -152,8 +157,10 @@ def main():
             if btn_back:
                 print("\nBack/Select pressed — stopping.")
                 break
-            if btn_a or btn_b:
-                print(" [gripper control not wired yet — see module docstring]", end="\r")
+            if btn_a:
+                gripper_cmd = -1.0  # close (matches IsaacLab's negative=close convention)
+            elif btn_b:
+                gripper_cmd = 1.0   # open
 
             # --- read latest actual EE state (non-blocking; reuse last known pose if none ready) ---
             try:
@@ -173,7 +180,7 @@ def main():
                 delta_rot = R.from_rotvec([roll, pitch, yaw])
                 quat = (delta_rot * R.from_quat(quat)).as_quat()
 
-            send_data = np.concatenate([xyz, quat]).astype(np.float64)
+            send_data = np.concatenate([xyz, quat, [gripper_cmd]]).astype(np.float64)
             cmd_pub.send(send_data.tobytes())
 
             elapsed = time.time() - t0

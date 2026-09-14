@@ -74,3 +74,10 @@ double ActionSubscriber::readGripperCommands() {
 
     return finger1 + finger2;
 }
+
+double ActionSubscriber::readGripperCommand() {
+    // Single trailing gripper slot (CommsDataType::POSE_QUAT_GRIPPER), matching IsaacLab's
+    // one-scalar BinaryJointPositionActionCfg -- negative = close, non-negative = open.
+    std::lock_guard<std::mutex> guard(accessValuesMutex);
+    return values.back();
+}
