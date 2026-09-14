@@ -55,7 +55,7 @@ from scipy.spatial.transform import Rotation as R
 HZ = 30.0                       # matches the architecture's "~30 Hz policy/command" rate
 DT = 1.0 / HZ
 DEADZONE = 0.12
-MAX_LIN_VEL = 0.15               # m/s at full stick deflection
+MAX_LIN_VEL = 0.25               # m/s at full stick deflection
 MAX_ROT_VEL = 0.4                # rad/s at full stick/trigger deflection
 CMD_PORT = 2069
 STATE_PORT = 2096
