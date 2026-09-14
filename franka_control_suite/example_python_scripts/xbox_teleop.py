@@ -117,11 +117,17 @@ def main():
             t0 = time.time()
             pygame.event.pump()
 
+            # Axis order confirmed via --print-raw on the actual hardware (Xbox Series X
+            # controller, this SDL/pygame build): [LX, LY, LT, RX, RY, RT] -- triggers are
+            # interleaved between the sticks here, NOT [LX, LY, RX, RY, LT, RT] as originally
+            # assumed. Found 2026-09-14 when the right-stick/trigger channels didn't behave as
+            # expected on the first live test (left stick was unaffected -- axes 0/1 were already
+            # correct either way).
             lx = apply_deadzone(js.get_axis(0))
             ly = apply_deadzone(-js.get_axis(1))
-            rx = apply_deadzone(js.get_axis(2))
-            ry = apply_deadzone(-js.get_axis(3))
-            lt = (js.get_axis(4) + 1) / 2 if js.get_numaxes() > 4 else 0.0
+            lt = (js.get_axis(2) + 1) / 2 if js.get_numaxes() > 2 else 0.0
+            rx = apply_deadzone(js.get_axis(3))
+            ry = apply_deadzone(-js.get_axis(4))
             rt = (js.get_axis(5) + 1) / 2 if js.get_numaxes() > 5 else 0.0
             lb = js.get_button(4) if js.get_numbuttons() > 4 else 0
             rb = js.get_button(5) if js.get_numbuttons() > 5 else 0
