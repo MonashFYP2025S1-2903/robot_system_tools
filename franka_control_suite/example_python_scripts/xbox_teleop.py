@@ -55,8 +55,8 @@ from scipy.spatial.transform import Rotation as R
 HZ = 30.0                       # matches the architecture's "~30 Hz policy/command" rate
 DT = 1.0 / HZ
 DEADZONE = 0.12
-DEFAULT_MAX_LIN_VEL = 0.25      # m/s at full stick deflection -- override with --max-lin-vel
-DEFAULT_MAX_ROT_VEL = 0.4       # rad/s at full stick/trigger deflection -- override with --max-rot-vel
+DEFAULT_MAX_LIN_VEL = 1.5       # m/s at full stick deflection -- override with --max-lin-vel
+DEFAULT_MAX_ROT_VEL = 2.0       # rad/s at full stick/trigger deflection -- override with --max-rot-vel
 CMD_PORT = 2069
 STATE_PORT = 2096
 
@@ -86,6 +86,16 @@ def main():
     max_lin_vel = args.max_lin_vel
     max_rot_vel = args.max_rot_vel
 
+    print("=" * 60)
+    print("Xbox -> Franka EE-delta teleop")
+    print(f"  max_lin_vel = {max_lin_vel} m/s   (translation, left stick + right stick Y)")
+    print(f"  max_rot_vel = {max_rot_vel} rad/s (rotation: LB/RB=roll, LT/RT=pitch, right stick X=yaw)")
+    print(f"  deadzone    = {DEADZONE}")
+    print(f"  rate        = {HZ} Hz")
+    print(f"  host        = {args.host} (cmd :{CMD_PORT}, state :{STATE_PORT})")
+    print("  Override speed with --max-lin-vel / --max-rot-vel. Gripper (A/B) not wired yet.")
+    print("=" * 60)
+
     pygame.init()
     pygame.joystick.init()
     if pygame.joystick.get_count() == 0:
@@ -114,7 +124,7 @@ def main():
     print(f"Connecting to franka_control_suite on {args.host} (cmd :{CMD_PORT}, state :{STATE_PORT})...")
     xyz, quat = recv_ee_pose(state_sub)
     print(f"Initial EE pose: xyz={np.round(xyz, 3)} quat_xyzw={np.round(quat, 3)}")
-    print(f"Starting teleop loop (max_lin_vel={max_lin_vel} m/s, max_rot_vel={max_rot_vel} rad/s) — Ctrl+C to stop.")
+    print("Starting teleop loop — Ctrl+C to stop.")
 
     try:
         while True:
