@@ -20,16 +20,22 @@ namespace Comms {
 
 int main(int argc, char* argv[]) {
 
-    std::string robot_ip, realtime_pc_ip, workstation_ip; 
+    std::string robot_ip, realtime_pc_ip, workstation_ip;
+    double gripper_speed = 0.1;   // m/s, applies to both grasp() and move()
+    double gripper_force = 20.0;  // N, grasp() only -- force-limited, stops on contact
 
-    if(argc != 4){
-        std::cout<<"The usage is ./frank_control robot_ip realtime_pc_ip workstation_ip \n";
+    if(argc != 4 && argc != 6){
+        std::cout<<"The usage is ./frank_control robot_ip realtime_pc_ip workstation_ip [gripper_speed gripper_force]\n";
         exit(1);
     }
     else{
-        robot_ip = argv[1]; 
-        realtime_pc_ip = argv[2]; 
+        robot_ip = argv[1];
+        realtime_pc_ip = argv[2];
         workstation_ip = argv[3];
+        if (argc == 6) {
+            gripper_speed = std::stod(argv[4]);
+            gripper_force = std::stod(argv[5]);
+        }
     }
     try {
         ActionSubscriber as_(CommsDataType::POSE_QUAT_GRIPPER, std::string("tcp://") + realtime_pc_ip + std::string(":2069"));
@@ -86,14 +92,14 @@ int main(int argc, char* argv[]) {
         // Gripper thread -- same ZMQ channel as the arm (CommsDataType::POSE_QUAT_GRIPPER's
         // trailing scalar), same libfranka call pattern as the proven joint_pos_runner.cpp.
         // grasp() is force-limited (20N) and stops on contact, not a blind position close.
-        std::thread gripThread([&gripper_]() {
+        std::thread gripThread([&gripper_, gripper_speed, gripper_force]() {
             double max_w = gripper_.readOnce().max_width;
             bool closed = false;  // primed buffer above defaults to "open" (1.0)
             try {
                 while (true) {
                     double g = Comms::actionSubscriber->readGripperCommand();
-                    if (g < 0.0 && !closed)      { gripper_.grasp(0.0, 0.1, 20.0, 0.05, 0.05); closed = true; }
-                    else if (g >= 0.0 && closed) { gripper_.move(max_w, 0.1);                   closed = false; }
+                    if (g < 0.0 && !closed)      { gripper_.grasp(0.0, gripper_speed, gripper_force, 0.05, 0.05); closed = true; }
+                    else if (g >= 0.0 && closed) { gripper_.move(max_w, gripper_speed);                            closed = false; }
                     std::this_thread::sleep_for(std::chrono::milliseconds(150));
                 }
             } catch (...) {}
