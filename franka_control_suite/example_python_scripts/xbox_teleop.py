@@ -5,17 +5,20 @@ Xbox controller -> Franka EE-delta teleop, via franka_control_suite's ZMQ interf
 Protocol -- confirmed by reading the actual runner (src/runners/runner.cpp, the `franka_control`
 executable), not just the example_python_scripts/example_CartesianMotionControl.py reference
 script (whose float32 state dtype turned out to be wrong for this runner):
-    Command: ZMQ PUB  tcp://127.0.0.1:2069 -> 8x float64 [x,y,z,qx,qy,qz,qw,gripper], an ABSOLUTE
-             target pose plus a single gripper scalar (CommsDataType::POSE_QUAT_GRIPPER). The C++
-             side runs InverseKinematics(M_P_PSEUDO_INVERSE) for the arm -- genuine differential IK
-             (Jacobian pseudo-inverse -> joint *velocity*), NOT Cartesian impedance control (a
-             CartesianImpedance controller class exists in the source tree but no executable is
-             wired to it). The gripper scalar follows IsaacLab's mdp.BinaryJointPositionActionCfg
-             sign convention (negative = close, non-negative = open -- see camera_wrist_demo.py's
-             GRIPPER_CLOSE_ACTION = -1.0 in men119-isaaclabextensioncsirohri), read on the C++ side
-             by a dedicated thread calling franka::Gripper::grasp()/move() directly -- same pattern
-             as the already-proven joint_pos_runner.cpp used for the real cube-lift policy
-             deployment (force-limited grasp at 20N, stops on contact, not a blind position close).
+    Command: ZMQ PUB  tcp://127.0.0.1:2069 -> 10x float64 [x,y,z,qx,qy,qz,qw,gripper_cmd,
+             gripper_speed,gripper_force], an ABSOLUTE target pose plus gripper control
+             (CommsDataType::POSE_QUAT_GRIPPER). The C++ side runs InverseKinematics
+             (M_P_PSEUDO_INVERSE) for the arm -- genuine differential IK (Jacobian pseudo-inverse
+             -> joint *velocity*), NOT Cartesian impedance control (a CartesianImpedance controller
+             class exists in the source tree but no executable is wired to it). gripper_cmd follows
+             IsaacLab's mdp.BinaryJointPositionActionCfg sign convention (negative = close,
+             non-negative = open -- see camera_wrist_demo.py's GRIPPER_CLOSE_ACTION = -1.0 in
+             men119-isaaclabextensioncsirohri); gripper_speed (m/s) and gripper_force (N) are sent
+             live every tick so they're tunable from this script's own --gripper-speed/--gripper-
+             force flags without restarting franka_control. Read on the C++ side by a dedicated
+             thread calling franka::Gripper::grasp()/move() directly -- same pattern as the
+             already-proven joint_pos_runner.cpp used for the real cube-lift policy deployment
+             (grasp() is force-limited, stops on contact, not a blind position close).
              Continuously publishing an updated absolute target *is* the streaming teleop interface.
     State:   ZMQ SUB  tcp://127.0.0.1:2096, CONFLATE=True -> 16x float64 (NOT float32 -- confirmed
              against StatePublisher::writeMessage's std::vector<double>), the current EE pose as a
@@ -60,6 +63,8 @@ DT = 1.0 / HZ
 DEADZONE = 0.12
 DEFAULT_MAX_LIN_VEL = 1.5       # m/s at full stick deflection -- override with --max-lin-vel
 DEFAULT_MAX_ROT_VEL = 2.0       # rad/s at full stick/trigger deflection -- override with --max-rot-vel
+DEFAULT_GRIPPER_SPEED = 0.1     # m/s, open/close -- override with --gripper-speed
+DEFAULT_GRIPPER_FORCE = 20.0    # N, grasp force (force-limited, stops on contact) -- override with --gripper-force
 CMD_PORT = 2069
 STATE_PORT = 2096
 
@@ -85,18 +90,23 @@ def main():
     ap.add_argument("--print-raw", action="store_true", help="print raw axis/button values, no ZMQ connection")
     ap.add_argument("--max-lin-vel", type=float, default=DEFAULT_MAX_LIN_VEL, help="m/s at full stick deflection")
     ap.add_argument("--max-rot-vel", type=float, default=DEFAULT_MAX_ROT_VEL, help="rad/s at full stick/trigger deflection")
+    ap.add_argument("--gripper-speed", type=float, default=DEFAULT_GRIPPER_SPEED, help="gripper open/close speed, m/s")
+    ap.add_argument("--gripper-force", type=float, default=DEFAULT_GRIPPER_FORCE, help="gripper grasp force, N (force-limited -- stops on contact)")
     args = ap.parse_args()
     max_lin_vel = args.max_lin_vel
     max_rot_vel = args.max_rot_vel
+    gripper_speed = args.gripper_speed
+    gripper_force = args.gripper_force
 
     print("=" * 60)
     print("Xbox -> Franka EE-delta teleop")
-    print(f"  max_lin_vel = {max_lin_vel} m/s   (translation, left stick + right stick Y)")
-    print(f"  max_rot_vel = {max_rot_vel} rad/s (rotation: LB/RB=roll, LT/RT=pitch, right stick X=yaw)")
-    print(f"  deadzone    = {DEADZONE}")
-    print(f"  rate        = {HZ} Hz")
-    print(f"  host        = {args.host} (cmd :{CMD_PORT}, state :{STATE_PORT})")
-    print("  Override speed with --max-lin-vel / --max-rot-vel. Gripper: A=close, B=open.")
+    print(f"  max_lin_vel   = {max_lin_vel} m/s   (translation, left stick + right stick Y)")
+    print(f"  max_rot_vel   = {max_rot_vel} rad/s (rotation: LB/RB=roll, LT/RT=pitch, right stick X=yaw)")
+    print(f"  gripper_speed = {gripper_speed} m/s, gripper_force = {gripper_force} N  (A=close, B=open)")
+    print(f"  deadzone      = {DEADZONE}")
+    print(f"  rate          = {HZ} Hz")
+    print(f"  host          = {args.host} (cmd :{CMD_PORT}, state :{STATE_PORT})")
+    print("  Override with --max-lin-vel / --max-rot-vel / --gripper-speed / --gripper-force.")
     print("=" * 60)
 
     pygame.init()
@@ -180,7 +190,7 @@ def main():
                 delta_rot = R.from_rotvec([roll, pitch, yaw])
                 quat = (delta_rot * R.from_quat(quat)).as_quat()
 
-            send_data = np.concatenate([xyz, quat, [gripper_cmd]]).astype(np.float64)
+            send_data = np.concatenate([xyz, quat, [gripper_cmd, gripper_speed, gripper_force]]).astype(np.float64)
             cmd_pub.send(send_data.tobytes())
 
             elapsed = time.time() - t0

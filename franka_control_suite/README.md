@@ -70,10 +70,13 @@ sudo setcap cap_sys_nice+ep ./franka_control   # see gotcha above -- required ev
 ./franka_control <robot_ip> <realtime_pc_ip> <workstation_ip> [gripper_speed gripper_force]
 #   e.g. on the Franka workstation itself, controller + Python client both local:
 ./franka_control 172.16.0.2 127.0.0.1 127.0.0.1
-#   gripper_speed (m/s) and gripper_force (N) are optional, default 0.1 / 20.0
+#   the optional trailing args are only the cold-start default (before any client has sent a
+#   command) -- once xbox_teleop.py is running, ITS --gripper-speed/--gripper-force take over
+#   live (sent every tick over the same ZMQ channel as the arm pose), so day-to-day tuning only
+#   needs restarting the Python script, not franka_control.
 
 # Terminal 2 -- the Xbox teleop client
-python example_python_scripts/xbox_teleop.py --max-lin-vel 1.5 --max-rot-vel 2.0
+python example_python_scripts/xbox_teleop.py --max-lin-vel 1.5 --max-rot-vel 2.0 --gripper-speed 0.1 --gripper-force 20.0
 ```
 Robot must be unlocked and FCI activated via the Desk web UI (`https://<robot_ip>/desk/`) first.
 A=close gripper, B=open, Back/Select=quit. See the script's own docstring for the full ZMQ

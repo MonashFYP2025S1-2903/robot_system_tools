@@ -72,7 +72,9 @@ int main(int argc, char* argv[]) {
         Comms::actionSubscriber->values = {
             initial_transform.translation().x(), initial_transform.translation().y(), initial_transform.translation().z(),
             initial_quat.x(), initial_quat.y(), initial_quat.z(), initial_quat.w(),
-            1.0  // gripper: non-negative = open (see readGripperCommand's convention) -- safe default
+            1.0,            // gripper_cmd: non-negative = open -- safe default before any client connects
+            gripper_speed,  // startup default; overridden live once xbox_teleop.py sends its own
+            gripper_force   //   --gripper-speed/--gripper-force (or its own defaults)
         };
 
         InverseKinematics IK_(1, IKType::M_P_PSEUDO_INVERSE);
@@ -90,16 +92,19 @@ int main(int argc, char* argv[]) {
         subscribeThread.detach();
 
         // Gripper thread -- same ZMQ channel as the arm (CommsDataType::POSE_QUAT_GRIPPER's
-        // trailing scalar), same libfranka call pattern as the proven joint_pos_runner.cpp.
-        // grasp() is force-limited (20N) and stops on contact, not a blind position close.
-        std::thread gripThread([&gripper_, gripper_speed, gripper_force]() {
+        // trailing 3 slots: cmd, speed, force), same libfranka call pattern as the proven
+        // joint_pos_runner.cpp. grasp() is force-limited and stops on contact, not a blind
+        // position close. speed/force are read live from the message every tick, so they're
+        // tunable from xbox_teleop.py's --gripper-speed/--gripper-force without restarting this.
+        std::thread gripThread([&gripper_]() {
             double max_w = gripper_.readOnce().max_width;
             bool closed = false;  // primed buffer above defaults to "open" (1.0)
             try {
                 while (true) {
-                    double g = Comms::actionSubscriber->readGripperCommand();
-                    if (g < 0.0 && !closed)      { gripper_.grasp(0.0, gripper_speed, gripper_force, 0.05, 0.05); closed = true; }
-                    else if (g >= 0.0 && closed) { gripper_.move(max_w, gripper_speed);                            closed = false; }
+                    double g, speed, force;
+                    Comms::actionSubscriber->readGripperParams(g, speed, force);
+                    if (g < 0.0 && !closed)      { gripper_.grasp(0.0, speed, force, 0.05, 0.05); closed = true; }
+                    else if (g >= 0.0 && closed) { gripper_.move(max_w, speed);                    closed = false; }
                     std::this_thread::sleep_for(std::chrono::milliseconds(150));
                 }
             } catch (...) {}

@@ -81,3 +81,12 @@ double ActionSubscriber::readGripperCommand() {
     std::lock_guard<std::mutex> guard(accessValuesMutex);
     return values.back();
 }
+
+void ActionSubscriber::readGripperParams(double& cmd, double& speed, double& force) {
+    // Trailing 3 slots: gripper_cmd, gripper_speed, gripper_force -- sent live so they're tunable
+    // from xbox_teleop.py's CLI without restarting franka_control.
+    std::lock_guard<std::mutex> guard(accessValuesMutex);
+    cmd   = values.end()[-3];
+    speed = values.end()[-2];
+    force = values.end()[-1];
+}
