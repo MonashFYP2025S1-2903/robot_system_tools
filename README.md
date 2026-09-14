@@ -5,7 +5,7 @@ This repository contains scripts and off-the-shelf starter scripts for developpi
 
 - In the [robot_toolkit](robot_toolkit) folder you can find the calibration scripts to run robot camera calibration routine(currently) and multi camera calibration routine (soon), find more info [here](robot_toolkit/docs). 
 
-- In the [franka_control_suite](franka_control_suite)(Work in Progress) folder you can find experimental feedback controllers implemented in libfranka.
+- In the [franka_control_suite](franka_control_suite)(Work in Progress) folder you can find experimental feedback controllers implemented in libfranka. This fork's own Xbox-controller EE-delta teleop (with gripper control) is documented in [franka_control_suite/README.md](franka_control_suite/README.md#xbox-controller-teleop-lingheng-franka-deployment-fork).
 
 - In [tests](tests) (Work in Progress) folder we will provide various unit tests and integration test scripts to ensure the software system is working as expected. Including tests for the docker environment, frankapy, robot camera calibration, etc (Work in Progress)
 
