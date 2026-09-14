@@ -2,13 +2,19 @@
 Xbox controller -> Franka EE-delta teleop, via franka_control_suite's ZMQ Cartesian-impedance
 interface (NOT FrankaPy — see the vault note below for why that path is explicitly avoided here).
 
-Protocol (from ../example_python_scripts/example_CartesianMotionControl.py):
+Protocol -- confirmed 2026-09-14 by reading the actual runner (src/runners/runner.cpp, the
+`franka_control` executable), not just the example_python_scripts/example_CartesianMotionControl.py
+reference script (whose float32 state dtype turned out to be wrong for this runner -- see below):
     Command: ZMQ PUB  tcp://127.0.0.1:2069 -> 7x float64 [x,y,z,qx,qy,qz,qw], an ABSOLUTE target
-             pose. The C++ cartesian_impedance controller runs tau = J^T(Kp(x_des-x) - Kd*xdot)
-             against it at 1 kHz internally -- so continuously publishing an updated target *is*
-             the streaming teleop interface (no IK, no discrete goto-and-block calls needed).
-    State:   ZMQ SUB  tcp://127.0.0.1:2096, CONFLATE=True -> 16x float32, the current EE pose as
-             a column-major 4x4 homogeneous transform.
+             pose. The C++ side runs InverseKinematics(M_P_PSEUDO_INVERSE) -- genuine differential
+             IK (Jacobian pseudo-inverse -> joint *velocity*), NOT Cartesian impedance control.
+             A CartesianImpedance controller class exists in the source tree but no executable is
+             wired to it (checked CMakeLists.txt add_executable list). Continuously publishing an
+             updated absolute target *is* the streaming teleop interface either way.
+    State:   ZMQ SUB  tcp://127.0.0.1:2096, CONFLATE=True -> 16x float64 (NOT float32 -- confirmed
+             against StatePublisher::writeMessage's std::vector<double> -- a float32 read gets
+             "cannot reshape array of size 32 into shape (4,4)", found on the first real test run),
+             the current EE pose as a column-major 4x4 homogeneous transform.
 
 Only requires zmq + numpy + scipy + pygame -- no frankapy, no autolab_core, no ROS `tf`.
 
@@ -28,10 +34,14 @@ workstation itself, or a separate dedicated realtime PC) is NOT YET CONFIRMED --
 running. Start the controller first (see franka_control_suite/README.md for the runner command),
 *then* this script.
 
-NOT YET TESTED ON HARDWARE. Also note: this protocol has no gripper channel in the reviewed
-files (7-float pose only) -- gripper control (if needed) is a separate, not-yet-identified path
-(likely libfranka's gripper API directly, or a separate ZMQ topic not seen in the files checked
-so far). A/B buttons are wired to print a TODO instead of silently doing nothing.
+Hardware-tested 2026-09-14 (men119 account): franka_control's cold-start crash (unsafe all-zero
+ActionSubscriber default under ControlMode::ABSOLUTE -- see the vault note) and its move-to-rest
+speed (0.5 -> 0.1) are both fixed as of commit 3cafad1. This script's own state-read dtype bug
+(float32 -> float64, above) was caught on the first live connection attempt, not yet re-tested
+after the fix. Also note: this protocol has no gripper channel in the reviewed files (7-float
+pose only) -- gripper control (if needed) is a separate, not-yet-identified path (likely
+libfranka's gripper API directly, or a separate ZMQ topic not seen in the files checked so far).
+A/B buttons are wired to print a TODO instead of silently doing nothing.
 """
 import argparse
 import time
@@ -60,7 +70,7 @@ def apply_deadzone(x: float, dz: float = DEADZONE) -> float:
 def recv_ee_pose(sub_socket) -> tuple[np.ndarray, np.ndarray]:
     """Blocking receive of the latest EE state -> (xyz, quat_xyzw)."""
     msg = sub_socket.recv()
-    mat = np.frombuffer(msg, dtype=np.float32).reshape(4, 4, order="F")
+    mat = np.frombuffer(msg, dtype=np.float64).reshape(4, 4, order="F")
     xyz = mat[:3, -1].astype(np.float64)
     quat_xyzw = R.from_matrix(mat[:3, :3]).as_quat()  # scipy returns [x,y,z,w]
     return xyz, quat_xyzw
