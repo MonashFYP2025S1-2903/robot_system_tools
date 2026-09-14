@@ -45,7 +45,7 @@ desktop login* (GDM) does not pick it up even after a genuine full log-out/log-i
 (checked directly; not a missing-config issue, root cause not fully identified). If
 `franka_control` fails with `libfranka: unable to set realtime scheduling: Operation not
 permitted` from a local terminal, the actual fix is a file capability, not a session/login
-change (see "Rebuilding" below).
+change (see "Building" below).
 
 Python side: a plain `venv` is enough (`zmq`/`numpy`/`scipy`/`pygame` only) --
 ```bash
