@@ -81,3 +81,11 @@ python example_python_scripts/xbox_teleop.py --max-lin-vel 1.5 --max-rot-vel 2.0
 Robot must be unlocked and FCI activated via the Desk web UI (`https://<robot_ip>/desk/`) first.
 A=close gripper, B=open, Back/Select=quit. See the script's own docstring for the full ZMQ
 protocol and the fixes found along the way (cold-start crash, axis mapping, state dtype).
+
+## SpaceMouse teleop (direct libfranka, `spacemouse_teleop/`)
+
+A second way to drive the arm by hand, next to the Xbox teleop above: a 3Dconnexion SpaceMouse
+controls the gripper directly through libfranka (translation, yaw, tilt and a hold-to-move
+gripper), without going through `franka_control` or ZMQ, and with a workspace box and a
+joint-limit guard. Do not run it at the same time as `franka_control` / `xbox_teleop.py`.
+See `spacemouse_teleop/MANUAL.md` for the controls and the run command.
