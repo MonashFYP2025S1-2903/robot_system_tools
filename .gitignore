@@ -25,4 +25,4 @@ franka_control_suite/build/
 !robot_toolkit/robot_arm_algos/src/inference/objects/**/*.dae
 !robot_toolkit/robot_arm_algos/src/inference/objects/**/*.mtl
 !robot_toolkit/robot_arm_algos/src/inference/objects/**/*.obj
-!franka_control_suite/spacemouse_teleop/docs/*.png
+!franka_control_suite/teleop_spacemouse/docs/*.png

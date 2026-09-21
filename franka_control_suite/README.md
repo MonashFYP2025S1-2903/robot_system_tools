@@ -76,16 +76,23 @@ sudo setcap cap_sys_nice+ep ./franka_control   # see gotcha above -- required ev
 #   needs restarting the Python script, not franka_control.
 
 # Terminal 2 -- the Xbox teleop client
-python example_python_scripts/xbox_teleop.py --max-lin-vel 1.5 --max-rot-vel 2.0 --gripper-speed 0.1 --gripper-force 20.0
+python teleop_xbox_controller/xbox_teleop.py --max-lin-vel 1.5 --max-rot-vel 2.0 --gripper-speed 0.1 --gripper-force 20.0
 ```
 Robot must be unlocked and FCI activated via the Desk web UI (`https://<robot_ip>/desk/`) first.
 A=close gripper, B=open, Back/Select=quit. See the script's own docstring for the full ZMQ
 protocol and the fixes found along the way (cold-start crash, axis mapping, state dtype).
 
-## SpaceMouse teleop (direct libfranka, `spacemouse_teleop/`)
+## Teleoperation tools
+
+Both live in `teleop_*` folders so they group together: `teleop_xbox_controller/` (`xbox_teleop.py`,
+sends poses to `franka_control` over ZMQ; the section above) and `teleop_spacemouse/` (direct
+libfranka, section below). The Xbox script was moved there from `example_python_scripts/` on
+2026-09-22.
+
+## SpaceMouse teleop (direct libfranka, `teleop_spacemouse/`)
 
 A second way to drive the arm by hand, next to the Xbox teleop above: a 3Dconnexion SpaceMouse
 controls the gripper directly through libfranka (translation, yaw, tilt and a hold-to-move
 gripper), without going through `franka_control` or ZMQ, and with a workspace box and a
 joint-limit guard. Do not run it at the same time as `franka_control` / `xbox_teleop.py`.
-See `spacemouse_teleop/MANUAL.md` for the controls and the run command.
+See `teleop_spacemouse/MANUAL.md` for the controls and the run command.

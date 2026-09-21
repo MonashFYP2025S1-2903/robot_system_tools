@@ -1,4 +1,4 @@
-# spacemouse_teleop
+# teleop_spacemouse
 
 Direct libfranka teleoperation of the Franka Panda with a 3Dconnexion SpaceMouse Wireless: translation, yaw, tilt (pitch and roll) and a hold-to-move gripper, with a workspace box and a joint-limit guard. It is independent of `franka_control` and `xbox_teleop.py` (it does not use their ZMQ interface).
 
