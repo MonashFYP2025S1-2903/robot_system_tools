@@ -110,7 +110,7 @@ Run `./spacemouse_cartesian_teleop <options>`. There is no `--help`; the table l
 | `--dry-run` | | no robot connection; prints what would be commanded, with a simulated hand |
 | `--ip`, `--device` | 172.16.0.2, auto | robot address; force a `/dev/hidrawN` |
 
-The status line, printed five times a second, shows the raw cap values (`raw=`), the direction the program reads from them (`user[fwd left up]`, `ang=`), the commanded gripper velocity (`v_base=`), position (`pos_rel=`), `armed`, `jl`, `mode`, `grip_target`, `w`, `hold`, the button state `btn=` (1 left, 2 right, 3 both) and the age of the last cap report.
+The status line, printed five times a second, shows the raw cap values (`raw=`), the direction the program reads from them (`user[fwd left up]`, `ang=`), the commanded gripper velocity (`v_base=`), position (`pos_rel=`), `armed`, `jl`, `mode`, `grip_target`, `w`, `hold`, the button state `btn=` (1 left, 2 right, 3 both) the age of the last cap report (`age=`, -1.00 until the first report arrives) and the cap battery percent (`bat=`, -1 until a battery report arrives).
 
 ## Troubleshooting
 
@@ -124,6 +124,7 @@ The status line, printed five times a second, shows the raw cap values (`raw=`),
 | Program starts but nothing moves | The cap is not armed: release it fully for 0.3 s (`armed=0` in the status line), or the cap is asleep (`age` keeps growing). |
 | Arm stops by itself at some place | Workspace box edge, or the joint-limit guard (`jl` near 0). Move back the other way; check with `--status`. |
 | `Move command aborted: motion aborted by reflex` (`joint_position_limits_violation`) | A joint reached its limit, usually from a badly tilted gripper. Clear the reflex in Desk or restart with `--recover`, then bring the gripper close to straight down. |
+| The cap LED is off | Normal. The status LED shows the battery, then the connection (white steady = receiver, blue = Bluetooth) for a few seconds after power-on or wake, and then goes out by design; the manual offers no setting to keep it on. To check the link, touch the cap and watch `age=` in the status line (it drops to 0 with each report), or power-cycle the cap and read the first seconds of the LED. On Windows, 3Dconnexion Settings shows the connection mode and battery as icons. |
 | `robot_mode=4 (Reflex)` in `--status` | Same: clear it in Desk or use `--recover`. |
 | Program prints `gripper unavailable` | The hand could not be reached. Check the hand is powered and the gripper connection is not used by another program. Use `--no-gripper` to drive the arm alone. |
 | Hand jerky | Should not happen: it moves as one smooth move per button hold. If it does, note `--grip-speed` and tell the maintainer. |

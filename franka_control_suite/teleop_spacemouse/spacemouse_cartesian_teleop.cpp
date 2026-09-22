@@ -455,13 +455,13 @@ void MonitorLoop(Shared& s, Teleop& tp) {
     std::printf(
         "raw=(%4d %4d %4d %4d %4d %4d) user[fwd left up]=(%+.2f %+.2f %+.2f) "
         "ang=(%+.2f %+.2f %+.2f) v_base=(%+.3f %+.3f %+.3f) pos_rel=(%+.3f %+.3f %+.3f) "
-        "armed=%d jl=%.2f mode=%s grip_target=%.3f w=%.3f hold=%d btn=%d,%d oid=%d age=%.2fs\n",
+        "armed=%d jl=%.2f mode=%s grip_target=%.3f w=%.3f hold=%d btn=%d,%d oid=%d bat=%d age=%.2fs\n",
         s.raw[0].load(), s.raw[1].load(), s.raw[2].load(), s.raw[3].load(), s.raw[4].load(),
         s.raw[5].load(), s.mon[0].load(), s.mon[1].load(), s.mon[2].load(), s.mon[3].load(),
         s.mon[4].load(), s.mon[5].load(), s.mon[6].load(), s.mon[7].load(), s.mon[8].load(),
         s.mon[9].load(), s.mon[10].load(), s.mon[11].load(), (int)tp.armed, s.mon[12].load(), s.mon[13].load() > 0.5 ? "TILT" : "move",
         s.grip_target.load(), s.grip_w.load(), (int)s.grip_grasped.load(), s.btn.load(),
-        s.btn2.load(), s.other_id.load(), age);
+        s.btn2.load(), s.other_id.load(), s.battery.load(), age);
     std::fflush(stdout);
   }
 }
