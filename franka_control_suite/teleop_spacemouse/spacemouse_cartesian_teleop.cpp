@@ -103,11 +103,14 @@ std::string ReadFile(const std::string& path) {
 }
 
 // The motion interface is the hidraw node of vendor 0x256F whose report descriptor opens with
-// Usage Page (Generic Desktop) / Usage (Multi-axis Controller): 05 01 09 08.
+// Usage Page (Generic Desktop) / Usage (Multi-axis Controller): 05 01 09 08 (USB cable).
+// Fallback for the Universal Receiver: after a re-pair on 2026-09-22 it carried the same 13-byte
+// motion reports on the one interface whose descriptor opens with vendor Usage Page 0xFF00
+// (06 00 ff), while its other interfaces use page 0xFF0A. Use --device to override.
 std::string FindHidraw() {
   DIR* d = opendir("/sys/class/hidraw");
   if (!d) return "";
-  std::string found;
+  std::string found, vendor_fallback;
   while (dirent* e = readdir(d)) {
     std::string name = e->d_name;
     if (name.rfind("hidraw", 0) != 0) continue;
@@ -119,9 +122,12 @@ std::string FindHidraw() {
       found = "/dev/" + name;
       break;
     }
+    if (rd.size() >= 3 && (uint8_t)rd[0] == 0x06 && (uint8_t)rd[1] == 0x00 &&
+        (uint8_t)rd[2] == 0xff && vendor_fallback.empty())
+      vendor_fallback = "/dev/" + name;
   }
   closedir(d);
-  return found;
+  return found.empty() ? vendor_fallback : found;
 }
 
 void ReaderLoop(int fd, Shared& s) {

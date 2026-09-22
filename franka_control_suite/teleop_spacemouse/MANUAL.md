@@ -6,7 +6,7 @@ Move the Panda's gripper with a 3Dconnexion SpaceMouse Wireless. Push, pull and 
 
 ## Quick start
 
-1. **SpaceMouse:** plug it into the workstation with its USB cable (a USB hub is fine) and wake it by touching the cap. The Universal Receiver should work too but has not been retested on the workstation; Bluetooth is untested.
+1. **SpaceMouse:** plug it into the workstation with its USB cable (a USB hub is fine) and wake it by touching the cap. The Universal Receiver works too (tested 2026-09-22, see Troubleshooting for pairing); Bluetooth is untested. After the status flash at power-on the cap LED goes out, and that is the normal connected state.
 2. **Robot:** in Desk (`https://172.16.0.2/desk/`) unlock the joints, **Activate FCI**, and release the user stop. Keep your hand on the user stop while the arm moves.
 3. **Pose:** hand-guide the gripper so it points **straight down** over the work area, about (0.55, 0.00, 0.30) m in the robot base frame. See "Workspace and start pose".
 4. **Check** without moving anything:
@@ -116,7 +116,9 @@ The status line, printed five times a second, shows the raw cap values (`raw=`),
 
 | Symptom | Cause and fix |
 |---|---|
-| `no SpaceMouse motion interface found` | Cap not connected or asleep. Touch it, check the cable or receiver. Over a receiver, the cap must be paired to that receiver. |
+| `no SpaceMouse motion interface found` | Cap not connected or asleep. Touch it, check the cable or receiver. Over a receiver, the cap must be paired to that receiver. `lsusb` showing `256f:c652` only proves the receiver is there, not that the cap is linked to it. |
+| Receiver plugged in, but the cap never connects to it | The pairing was lost or the cap battery was flat. On a Windows machine with the receiver plugged in: charge the cap first, turn Bluetooth off, unplug the cap USB cable, open 3Dconnexion Settings, Advanced Settings, Universal Receiver, Add device, and follow the wizard (it says "Pairing Failed: taking too long to detect your device" if the cap is not awake). The pairing lives in the cap and the receiver, so afterwards the receiver works on any machine, with no app on the workstation. |
+| Receiver works but auto-detect picks the wrong node | Over the receiver the motion arrives on the interface whose descriptor starts with vendor page `06 00 ff` (the program falls back to it automatically). Force a node with `--device /dev/hidrawN`; to see which node streams, read them with `xxd -l 64 /dev/hidrawN` while moving the cap. |
 | `cannot open /dev/hidrawN: Permission denied` | The udev rule for vendor 256f is missing. Add `SUBSYSTEM=="hidraw", ATTRS{idVendor}=="256f", MODE="0666"` to `/etc/udev/rules.d/99-3dconnexion.rules` and reload udev (needs sudo). |
 | `libfranka: Connection to FCI refused` | FCI is not activated. Activate it in Desk. |
 | Program starts but nothing moves | The cap is not armed: release it fully for 0.3 s (`armed=0` in the status line), or the cap is asleep (`age` keeps growing). |
@@ -130,7 +132,7 @@ The status line, printed five times a second, shows the raw cap values (`raw=`),
 ## Status and known limits (2026-09-21)
 
 - Tested on the real Panda over the USB cable: translation, gripper, the joint-limit guard and the absolute box. Rotation (yaw and tilt) is built and was checked in a dry-run; its directions on the real arm still need a low-speed check.
-- The Universal Receiver and Bluetooth have not been retested on the workstation.
+- The Universal Receiver was tested on the workstation on 2026-09-22 (after a re-pair): motion streams on the vendor-page interface and is auto-detected. The side buttons have not been checked over the receiver yet. Bluetooth has not been retested.
 - The gripper action is a hold-to-move width; the Isaac Lab side (a width-target action for demonstrations) is not built yet.
 - This program is separate from the Xbox teleop: the Xbox script sends poses to `franka_control` over ZMQ, while this one controls the arm directly through libfranka.
 
