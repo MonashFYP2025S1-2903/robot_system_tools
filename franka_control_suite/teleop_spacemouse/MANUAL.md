@@ -133,7 +133,7 @@ The status line, printed five times a second, shows the raw cap values (`raw=`),
 ## Status and known limits (2026-09-21)
 
 - Tested on the real Panda over the USB cable: translation, gripper, the joint-limit guard and the absolute box. Rotation (yaw and tilt) is built and was checked in a dry-run; its directions on the real arm still need a low-speed check.
-- The Universal Receiver was tested on the workstation on 2026-09-22 (after a re-pair): motion streams on the vendor-page interface and is auto-detected. The side buttons have not been checked over the receiver yet. Bluetooth has not been retested.
+- The Universal Receiver was tested on the workstation on 2026-09-22 (after a re-pair): motion streams on the vendor-page interface and is auto-detected. The side buttons also work over the receiver (confirmed 2026-09-22). Bluetooth has not been retested.
 - The gripper action is a hold-to-move width; the Isaac Lab side (a width-target action for demonstrations) is not built yet.
 - This program is separate from the Xbox teleop: the Xbox script sends poses to `franka_control` over ZMQ, while this one controls the arm directly through libfranka.
 
